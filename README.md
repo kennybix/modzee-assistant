@@ -4,6 +4,8 @@
 
 This project is a proof-of-concept AI Assistant feature built for modzee using the Laravel framework for the backend and Vue.js for the frontend. The assistant integrates with the OpenAI API (specifically designed for models like GPT-4, GPT-3.5-Turbo, or GPT-4o Mini) to provide contextual responses based on internal company data and fulfill specific tasks like report generation.
 
+![Landing Page](public/app_screen.png)  
+
 **Core Objectives:**
 * Accept user prompts via a web interface.
 * Send requests to the OpenAI API, potentially augmenting prompts with relevant business data.
