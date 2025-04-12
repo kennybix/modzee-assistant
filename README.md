@@ -25,6 +25,8 @@ This project is a proof-of-concept AI Assistant feature built for modzee using t
 * **(Bonus Implementation)** **Logging:** AI interactions (prompt, response, model, tokens, cost, context usage indication) are logged to the `ai_logs` database table.
 * **(Bonus Implementation)** **Usage Tracking:** Basic usage tracking (tokens, cost) per user per month is implemented (requires `user_ai_usage` table and related model logic).
 
+![Landing Page](public/app_screen_dark.png)  
+
 ## 3. Technology Stack
 
 * **Backend:** Laravel Framework

@@ -199,8 +199,8 @@ export default {
       error: null,
       selectedPersona: 'general',
       conversationHistory: [],
-      recognition: null, // Holds the SpeechRecognition instance
-      isAuthenticated: true, // Assuming this is handled elsewhere
+      recognition: null,
+      isAuthenticated: true,
       isDarkMode: this.detectPreferredColorScheme(),
       isInitialLoad: true,
       personas: [
@@ -211,7 +211,7 @@ export default {
       ],
     };
   },
-
+  
   computed: {
     previousMessages() {
       return this.conversationHistory.map(item => ({
@@ -220,7 +220,7 @@ export default {
       }));
     }
   },
-
+  
   watch: {
     conversationHistory: {
       handler(newValue) {
@@ -229,305 +229,213 @@ export default {
       },
       deep: true
     },
-
+    
     selectedPersona(newValue) {
       localStorage.setItem('aiSelectedPersona', newValue);
     },
-
+    
     isDarkMode(newValue) {
       localStorage.setItem('aiDarkMode', newValue ? 'true' : 'false');
-      // Optional: Apply class directly to body or html if needed for global styles
-      // document.body.classList.toggle('dark-mode', newValue);
     }
   },
-
+  
   created() {
     this.debouncedAutoGrow = debounce(this.autoGrowTextarea, 150);
-
+    
     // Listen for system color scheme changes
     if (window.matchMedia) {
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', this.updateColorScheme);
     }
   },
-
+  
   mounted() {
     this.loadConversation();
-    this.initSpeechRecognition(); // Initialize speech recognition
-
-    // Optional: Apply initial dark mode class to body if needed
-    // if (this.isDarkMode) document.body.classList.add('dark-mode');
-
+    this.initSpeechRecognition();
+    
     this.$nextTick(() => {
       this.autoGrowTextarea();
       setTimeout(() => {
         this.isInitialLoad = false;
-      }, 500); // Delay to allow initial render before removing animation class trigger
+      }, 500);
     });
   },
-
+  
   beforeUnmount() {
     if (window.matchMedia) {
       window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', this.updateColorScheme);
     }
-
-    // Clean up Speech Recognition
+    
     if (this.recognition) {
-      this.recognition.onresult = null;
       this.recognition.onend = null;
+      this.recognition.onresult = null;
       this.recognition.onerror = null;
       if (this.isListening) {
         this.recognition.stop();
       }
     }
-     // Optional: Clean up body class if added
-    // document.body.classList.remove('dark-mode');
   },
-
+  
   methods: {
     detectPreferredColorScheme() {
       const savedMode = localStorage.getItem('aiDarkMode');
       if (savedMode !== null) {
         return savedMode === 'true';
       }
-      // Check system preference if no setting is saved
-      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        return true;
+      }
+      return false;
     },
-
+    
     updateColorScheme(e) {
-      // Only update if the user hasn't manually toggled the theme
       if (localStorage.getItem('aiDarkMode') === null) {
         this.isDarkMode = e.matches;
       }
     },
-
+    
     toggleTheme() {
       this.isDarkMode = !this.isDarkMode;
-      // Local storage is updated via the watcher
     },
-
+    
     loadConversation() {
       const savedHistory = localStorage.getItem('aiConversationHistory');
       const savedPersona = localStorage.getItem('aiSelectedPersona');
-
+      
       if (savedHistory) {
         try {
           const parsedHistory = JSON.parse(savedHistory);
           if (Array.isArray(parsedHistory)) {
-            // Basic validation of items can be added here if needed
             this.conversationHistory = parsedHistory;
           } else {
             console.error('Invalid conversation history format found in localStorage.');
-            localStorage.removeItem('aiConversationHistory'); // Clear invalid data
+            localStorage.removeItem('aiConversationHistory');
           }
         } catch (e) {
           console.error('Error parsing saved conversation history:', e);
-          localStorage.removeItem('aiConversationHistory'); // Clear corrupted data
+          localStorage.removeItem('aiConversationHistory');
         }
       }
-
+      
       if (savedPersona) {
-        // Ensure the saved persona is still valid
         if (this.personas.some(p => p.value === savedPersona)) {
           this.selectedPersona = savedPersona;
         } else {
-          localStorage.removeItem('aiSelectedPersona'); // Clear invalid persona
+          localStorage.removeItem('aiSelectedPersona');
         }
       }
-
-      // Wait for the DOM to update after loading history
-      this.$nextTick(() => {
-          this.scrollToBottom(true); // Scroll immediately on load
-      });
+      
+      this.scrollToBottom();
     },
-
+    
     initSpeechRecognition() {
-      // Standard SpeechRecognition API
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
+      
       if (SpeechRecognition) {
         this.recognition = new SpeechRecognition();
-        this.recognition.continuous = false; // Stop after first pause in speech
-        this.recognition.interimResults = false; // We only want final results
-        this.recognition.lang = 'en-US'; // Set language
+        this.recognition.continuous = false;
+        this.recognition.interimResults = false;
+        this.recognition.lang = 'en-US';
 
-        // Event fired when a result is received
         this.recognition.onresult = (event) => {
-          // Get the transcript from the first result
-          const transcript = event.results[0][0].transcript;
-          this.userPrompt = transcript; // Update the textarea
-          this.isListening = false; // Turn off listening state
-          this.$nextTick(() => this.autoGrowTextarea()); // Adjust textarea size
-          console.log('Speech recognized:', transcript);
+          this.userPrompt = event.results[0][0].transcript;
+          this.isListening = false;
+          this.$nextTick(() => this.autoGrowTextarea());
         };
-
-        // Event fired when recognition ends (naturally or via stop())
-        this.recognition.onend = () => {
-          console.log('Speech recognition ended.');
-          this.isListening = false; // Ensure listening state is off
+        
+        this.recognition.onend = () => { 
+          this.isListening = false; 
         };
-
-        // Event fired on error
+        
         this.recognition.onerror = (event) => {
-          console.error('Speech Recognition Error:', event.error, event.message);
-          this.isListening = false; // Turn off listening state on error
-          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          this.isListening = false;
+          if (event.error === 'not-allowed') {
             this.error = "Microphone access was denied. Please allow access in your browser settings.";
-          } else if (event.error === 'no-speech') {
-            // You might not want to show an error for this, just log it.
-            console.info("No speech detected.");
-            // Optionally set error: this.error = "No speech detected. Please try again.";
+          } else if (event.error === 'no-speech'){
+            console.info("No speech detected");
           } else {
             this.error = `Speech recognition error: ${event.error}`;
+            console.error("Speech Recognition Error", event);
           }
         };
       } else {
         console.warn("Speech recognition not supported in this browser.");
-        this.recognition = null; // Ensure recognition is null if not supported
+        this.recognition = null;
       }
     },
-
-    // --- VOICE INPUT METHODS (ADDED) ---
-    startVoiceInput() {
-      if (this.recognition && !this.isListening && !this.isLoading && !this.isStreaming) {
-        try {
-          this.error = null; // Clear previous errors
-          this.recognition.start();
-          this.isListening = true;
-          console.log("Speech recognition started...");
-        } catch (err) {
-          // This might happen if recognition is already starting/running
-          console.error("Error starting speech recognition:", err);
-          this.error = "Could not start voice input. Please try again.";
-          this.isListening = false; // Ensure state is correct on error
-        }
-      } else if (!this.recognition) {
-          this.error = "Voice input is not supported by your browser.";
-      } else {
-          console.log("Cannot start voice input. Recognition unavailable or already listening/busy.");
-      }
-    },
-
-    stopVoiceInput() {
-      if (this.recognition && this.isListening) {
-        try {
-          this.recognition.stop();
-          // isListening state will be set to false by the 'onend' event handler
-          console.log("Speech recognition stopped manually.");
-        } catch (err) {
-          console.error("Error stopping speech recognition:", err);
-           // Force state update in case onend doesn't fire quickly
-          this.isListening = false;
-        }
-      }
-    },
-    // --- END OF VOICE INPUT METHODS ---
-
-
+    
     submitOnEnter(event) {
-      // Submit if Enter is pressed WITHOUT Shift
-      if (!event.shiftKey && !this.isLoading && !this.isStreaming) {
-        event.preventDefault(); // Prevent default newline behavior
+      if (!event.shiftKey) {
+        event.preventDefault();
         this.submitPrompt();
       }
     },
-
+    
     addLineBreak() {
-        // Called on Shift+Enter - Vue handles adding the newline,
-        // we just need to resize the textarea.
-        this.$nextTick(() => this.autoGrowTextarea());
+      this.$nextTick(() => this.autoGrowTextarea());
     },
-
+    
     autoGrowTextarea() {
       const el = this.$refs.promptInput;
       if (el) {
-        // Temporarily reset height to calculate scrollHeight accurately
         el.style.height = 'auto';
-        // Calculate the new height, capped at 150px
         const newHeight = Math.min(el.scrollHeight, 150);
         el.style.height = `${newHeight}px`;
       }
     },
-
+    
     async submitPrompt() {
       const promptText = this.userPrompt.trim();
-      if (!promptText || this.isLoading || this.isStreaming) return; // Prevent empty/concurrent submissions
+      if (!promptText || this.isLoading) return;
 
-      // --- Stop voice recognition if it's running ---
-      if (this.isListening) {
-          this.stopVoiceInput();
-      }
-      // ---
-
-      this.isLoading = true; // Use isLoading for the entire request/response cycle
+      this.isLoading = true;
       this.error = null;
-      const currentUserPrompt = promptText; // Store prompt before clearing
-      this.userPrompt = ''; // Clear input immediately
-      this.$nextTick(() => this.autoGrowTextarea()); // Reset textarea height
+      this.userPrompt = '';
+      this.$nextTick(() => this.autoGrowTextarea());
 
       const userMessageId = `user-${Date.now()}`;
-      // Add user message to history
       this.conversationHistory.push({
         role: 'user',
-        prompt: currentUserPrompt,
+        prompt: promptText,
         timestamp: new Date().toISOString(),
         id: userMessageId
       });
 
       const aiMessageIndex = this.conversationHistory.length;
-      // Add a placeholder for the AI response
+      const aiPlaceholderId = `ai-pending-${Date.now()}`;
       this.conversationHistory.push({
         role: 'ai',
-        response: '...', // Placeholder text
+        response: '...',
         timestamp: new Date().toISOString(),
-        id: `ai-pending-${Date.now()}`, // Temporary ID
-        isLoading: true // Indicate this message is loading
+        id: aiPlaceholderId,
+        isLoading: true
       });
-
-      this.scrollToBottom(); // Scroll down to show user message + placeholder
+      
+      this.scrollToBottom();
 
       try {
-        // Call the AI service
-        const result = await aiService.getAssistantResponse(currentUserPrompt, this.selectedPersona /*, this.previousMessages*/); // Pass history if needed by backend
-
-        // Find the placeholder message - might have shifted if errors occurred
-        const placeholderIndex = this.conversationHistory.findIndex(item => item.isLoading);
-
-        if (placeholderIndex !== -1 && result && result.reply && result.id) {
-            // Update the placeholder with the actual response
-            this.conversationHistory[placeholderIndex].response = result.reply;
-            this.conversationHistory[placeholderIndex].timestamp = result.timestamp || new Date().toISOString();
-            this.conversationHistory[placeholderIndex].isLoading = false;
-            this.conversationHistory[placeholderIndex].id = result.id; // Update with permanent ID from backend
-        } else if (placeholderIndex !== -1) {
-            // Handle cases where backend response is invalid but placeholder exists
-            console.error('Backend response issue: Result missing id or reply:', result);
-            this.conversationHistory[placeholderIndex].response = 'Error: Received incomplete response from server.';
-            this.conversationHistory[placeholderIndex].timestamp = new Date().toISOString();
-            this.conversationHistory[placeholderIndex].isLoading = false;
-            // Optionally keep the temporary ID or assign a new error ID
+        const result = await aiService.getAssistantResponse(promptText, this.selectedPersona);
+        if (result && result.reply && result.id) {
+          this.conversationHistory[aiMessageIndex].response = result.reply;
+          this.conversationHistory[aiMessageIndex].timestamp = result.timestamp || new Date().toISOString();
+          this.conversationHistory[aiMessageIndex].isLoading = false;
+          this.conversationHistory[aiMessageIndex].id = result.id;
         } else {
-            // This case should ideally not happen if placeholder logic is sound
-             console.error('Could not find placeholder AI message to update.');
-             this.error = 'An unexpected error occurred while displaying the response.';
+          console.error('Backend response issue: Result missing id or reply:', result);
+          this.conversationHistory[aiMessageIndex].response = 'Error: Received incomplete response from server.';
+          this.conversationHistory[aiMessageIndex].timestamp = new Date().toISOString();
+          this.conversationHistory[aiMessageIndex].isLoading = false;
         }
-
       } catch (err) {
         console.error('AI Assistant error:', err);
-        this.error = err.response?.data?.message || err.message || 'Failed to get response from AI Assistant.';
-        // Remove the placeholder message on error
-        const placeholderIndex = this.conversationHistory.findIndex(item => item.isLoading);
-        if (placeholderIndex !== -1) {
-            this.conversationHistory.splice(placeholderIndex, 1);
-        }
+        this.error = err.response?.data?.message || 'Failed to get response from AI Assistant.';
+        this.conversationHistory.splice(aiMessageIndex, 1);
       } finally {
-        this.isLoading = false; // Request cycle finished
-        this.isStreaming = false; // Ensure streaming is also false if applicable
-        this.scrollToBottom(); // Scroll to show the final response or error
-        // Re-focus the input field for convenience
+        this.isLoading = false;
+        this.scrollToBottom();
         this.$nextTick(() => this.$refs.promptInput?.focus());
       }
     },
-
+    
     async generateReport() {
       if (this.isLoading || this.isStreaming) return;
       this.isLoading = true;
@@ -540,196 +448,149 @@ export default {
         timestamp: new Date().toISOString(),
         id: userActionId
       });
-
+      
       const aiMessageIndex = this.conversationHistory.length;
       this.conversationHistory.push({
         role: 'ai',
         response: 'Generating report, please wait...',
         timestamp: new Date().toISOString(),
-        id: `ai-pending-report-${Date.now()}`,
-        isLoading: true
+        id: `ai-pending-${Date.now()}`
       });
-
-       this.scrollToBottom();
 
       try {
         const result = await aiService.generateReport(this.selectedPersona);
-        const placeholderIndex = this.conversationHistory.findIndex(item => item.isLoading && item.id.startsWith('ai-pending-report-'));
-
-        if (placeholderIndex !== -1 && result && result.reply) {
-          this.conversationHistory[placeholderIndex].response = result.reply;
-          this.conversationHistory[placeholderIndex].id = result.id || `ai-report-${Date.now()}`; // Use backend ID or generate one
-          this.conversationHistory[placeholderIndex].timestamp = result.timestamp || new Date().toISOString();
-          this.conversationHistory[placeholderIndex].isLoading = false;
-        } else if (placeholderIndex !== -1) {
-           console.error('Report generation response issue:', result);
-           this.conversationHistory[placeholderIndex].response = 'Error: Received incomplete report data.';
-           this.conversationHistory[placeholderIndex].isLoading = false;
+        if (result && result.reply) {
+          this.conversationHistory[aiMessageIndex].response = result.reply;
+          this.conversationHistory[aiMessageIndex].id = result.id || `ai-report-${Date.now()}`;
+          this.conversationHistory[aiMessageIndex].timestamp = result.timestamp || new Date().toISOString();
         } else {
-            console.error('Could not find placeholder AI report message to update.');
-            this.error = 'An unexpected error occurred while displaying the report.';
+          throw new Error('Invalid response format');
         }
-
       } catch (err) {
         console.error('Report generation error:', err);
-        this.error = err.response?.data?.message || err.message || 'Failed to generate report.';
-         const placeholderIndex = this.conversationHistory.findIndex(item => item.isLoading && item.id.startsWith('ai-pending-report-'));
-         if (placeholderIndex !== -1) {
-             // Option 1: Update placeholder with error
-             // this.conversationHistory[placeholderIndex].response = `Failed to generate report: ${this.error}`;
-             // this.conversationHistory[placeholderIndex].isLoading = false;
-             // Option 2: Remove placeholder entirely
-             this.conversationHistory.splice(placeholderIndex, 1);
-         }
+        this.error = err.message || 'Failed to generate report.';
+        this.conversationHistory[aiMessageIndex].response = 'Sorry, the report could not be generated at this time.';
       } finally {
         this.isLoading = false;
         this.scrollToBottom();
       }
     },
-
+    
     async rateResponse(responseId, rating) {
       const index = this.conversationHistory.findIndex(item => item.id === responseId);
-      if (index === -1 || this.conversationHistory[index].feedbackGiven) return; // Check if already given
-
-      // Optimistically update UI
-      // Use Vue.set or force update if reactivity is an issue, but usually direct mutation works
+      if (index === -1) return;
+      
       this.conversationHistory[index].feedbackGiven = true;
-
+      
       try {
         await aiService.submitFeedback(responseId, rating);
-        // Optional: Show a success notification/confirmation
       } catch (err) {
         console.error('Feedback submission error:', err);
         this.error = err.response?.data?.message || 'Failed to submit feedback.';
-        // Revert UI state on error
         this.conversationHistory[index].feedbackGiven = false;
       }
     },
-
+    
     formatTimestamp(timestamp) {
       if (!timestamp) return '';
       try {
         const date = new Date(timestamp);
-        // Check if date is valid
-        if (isNaN(date.getTime())) {
-            return 'Invalid Date';
-        }
-
         const today = new Date();
-        const optionsTime = { hour: 'numeric', minute: '2-digit' };
-        const optionsDate = { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
-
         if (date.toDateString() === today.toDateString()) {
-          return date.toLocaleTimeString([], optionsTime);
+          return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
         }
-        return date.toLocaleString([], optionsDate);
-      } catch (e) {
-        console.error('Error formatting timestamp:', timestamp, e);
-        return 'Invalid Date'; // Return specific error string
+        return date.toLocaleString([], { 
+          month: 'short', 
+          day: 'numeric',
+          hour: 'numeric', 
+          minute: '2-digit'
+        });
+      } catch (e) { 
+        console.error('Error formatting timestamp:', e);
+        return 'Invalid Date'; 
       }
     },
-
+    
     formatMarkdown(text) {
-      if (typeof text !== 'string' || !text) return ''; // Basic type check
+      if (!text) return '';
       try {
-        // Configure marked (consider doing this once in created() if options don't change)
         marked.setOptions({
-          breaks: true, // Convert GFM line breaks into <br> tags
-          gfm: true,    // Enable GitHub Flavored Markdown
-          headerIds: false, // Don't add IDs to headers
-          mangle: false   // Don't obfuscate email addresses
+          breaks: true,
+          gfm: true,
+          headerIds: false,
+          mangle: false
         });
-
-        // Sanitize the parsed HTML
         return DOMPurify.sanitize(marked.parse(text), {
-          ALLOWED_TAGS: [ // Be explicit about allowed tags
+          ALLOWED_TAGS: [
             'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'p', 'a', 'ul', 'ol',
             'nl', 'li', 'b', 'i', 'strong', 'em', 'strike', 'code', 'hr', 'br', 'div',
             'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre', 'img', 'span'
           ],
-          ALLOWED_ATTR: ['href', 'name', 'target', 'class', 'id', 'style', 'src', 'alt', 'title'] // Added title attribute
-          // Consider adding 'rel="noopener noreferrer"' for external links via HOOKS if needed
+          ALLOWED_ATTR: ['href', 'name', 'target', 'class', 'id', 'style', 'src', 'alt']
         });
       } catch (e) {
         console.error('Error formatting markdown:', e);
-        // Return the original text as fallback in case of error
         return text;
       }
     },
-
-    scrollToBottom(immediate = false) {
-      // Use nextTick to wait for the DOM to update after adding messages
+    
+    scrollToBottom() {
       this.$nextTick(() => {
         const container = this.$refs.conversationContainer;
         if (container) {
           container.scrollTo({
             top: container.scrollHeight,
-            behavior: immediate ? 'auto' : 'smooth' // Use 'auto' for instant scroll on load
+            behavior: 'smooth'
           });
         }
       });
     },
-
+    
     saveChat() {
       if (this.conversationHistory.length === 0) return;
       try {
         const dateStr = new Date()
           .toISOString()
-          .slice(0, 19) // YYYY-MM-DDTHH:mm:ss
-          .replace(/[:T]/g, '-'); // YYYY-MM-DD-HH-mm-ss
+          .slice(0, 19)
+          .replace(/[T:]/g, '-');
         const filename = `modzee-ai-chat-${dateStr}.json`;
-
-        // Create a clean version of the history for saving
         const chatData = {
           version: '1.0',
           persona: this.selectedPersona,
           savedAt: new Date().toISOString(),
           history: this.conversationHistory.map(item => ({
-            // Explicitly copy needed properties, exclude transient ones like 'isLoading'
-            role: item.role,
-            prompt: item.prompt,
-            response: item.response,
-            timestamp: item.timestamp,
-            id: item.id,
-            feedbackGiven: item.feedbackGiven
-            // Add any other persistent properties here
+            ...item,
+            isLoading: undefined
           }))
         };
-
-        const jsonStr = JSON.stringify(chatData, null, 2); // Pretty print JSON
-        const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
-
-        // Create a temporary link to trigger the download
+        const jsonStr = JSON.stringify(chatData, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
         link.download = filename;
-        link.style.display = 'none'; // Hide the link
+        link.style.display = 'none';
         document.body.appendChild(link);
-        link.click(); // Simulate a click
-
-        // Clean up the temporary link and URL object
+        link.click();
         setTimeout(() => {
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
-        }, 100); // Delay cleanup slightly
-
+        }, 100);
       } catch (err) {
         console.error("Failed to save chat:", err);
         this.error = "Could not save the chat history.";
       }
     },
-
+    
     clearConversation() {
       if (this.conversationHistory.length === 0) return;
-      // Confirmation dialog
       if (window.confirm('Are you sure you want to clear this conversation? This action cannot be undone.')) {
-        this.conversationHistory = []; // Clear the array
-        localStorage.removeItem('aiConversationHistory'); // Clear storage
-        this.error = null; // Clear any existing errors
+        this.conversationHistory = [];
+        localStorage.removeItem('aiConversationHistory');
+        this.error = null;
       }
     },
-
+    
     dismissError() {
       this.error = null;
     }
