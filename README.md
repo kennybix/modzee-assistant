@@ -2,33 +2,33 @@
 
 ## 1. Project Overview
 
-This project is a proof-of-concept AI Assistant feature built for modzee using the Laravel framework for the backend and Vue.js for the frontend. The assistant integrates with the OpenAI API (specifically designed for models like GPT-4, GPT-3.5-Turbo, or GPT-4o Mini) to provide contextual responses based on internal company data and fulfill specific tasks like report generation. [cite: 1]
+This project is a proof-of-concept AI Assistant feature built for modzee using the Laravel framework for the backend and Vue.js for the frontend. The assistant integrates with the OpenAI API (specifically designed for models like GPT-4, GPT-3.5-Turbo, or GPT-4o Mini) to provide contextual responses based on internal company data and fulfill specific tasks like report generation.
 
-**Core Objectives:** [cite: 1, 4, 5, 6]
+**Core Objectives:**
 * Accept user prompts via a web interface.
 * Send requests to the OpenAI API, potentially augmenting prompts with relevant business data.
 * Return contextual and helpful responses from the AI.
 * Display the conversation history and AI responses dynamically in the Vue.js UI.
-* Follow secure coding practices. [cite: 2]
+* Follow secure coding practices. 
 
 ## 2. Features Implemented
 
 * **Contextual Chat:** Ask questions related to internal data (Customers, Employees, Sales Data, Sales Targets, Teams). The backend attempts to inject relevant data into the prompt sent to OpenAI.
-* **AI Report Generation:** Generate a team performance report based on employee data (triggered by a dedicated button). [cite: 14, 15, 101]
+* **AI Report Generation:** Generate a team performance report based on employee data (triggered by a dedicated button).
 * **Persona Selection:** Choose different AI assistant personas (General, Sales, HR, Technical) to influence response style.
 * **Conversation History:** Chat history is displayed and persisted in the browser's localStorage.
 * **Feedback:** Users can provide thumbs up/down feedback on AI responses, which is stored in the database.
 * **Speech Recognition:** Users can dictate prompts using their microphone (requires browser support and permission).
-* **Loading & Error States:** The UI indicates when the AI is processing and displays errors clearly. [cite: 12]
-* **(Bonus Implementation)** **Logging:** AI interactions (prompt, response, model, tokens, cost, context usage indication) are logged to the `ai_logs` database table. [cite: 10]
+* **Loading & Error States:** The UI indicates when the AI is processing and displays errors clearly.
+* **(Bonus Implementation)** **Logging:** AI interactions (prompt, response, model, tokens, cost, context usage indication) are logged to the `ai_logs` database table.
 * **(Bonus Implementation)** **Usage Tracking:** Basic usage tracking (tokens, cost) per user per month is implemented (requires `user_ai_usage` table and related model logic).
 
 ## 3. Technology Stack
 
 * **Backend:** Laravel Framework
 * **Frontend:** Vue.js (likely Vue 3 based on debugging)
-* **AI:** OpenAI API (GPT-4 / GPT-3.5-Turbo / GPT-4o Mini recommended) [cite: 8]
-* **HTTP Client (Frontend):** Axios (via `aiService.js`) [cite: 13]
+* **AI:** OpenAI API (GPT-4 / GPT-3.5-Turbo / GPT-4o Mini recommended)
+* **HTTP Client (Frontend):** Axios (via `aiService.js`)
 * **HTTP Client (Backend):** Laravel HTTP Client / Guzzle (via `App\Services\OpenAi\Client`)
 * **Database:** SQLite (for local development, as configured)
 * **Styling:** CSS (with CSS variables for theming)
@@ -46,8 +46,8 @@ This project is a proof-of-concept AI Assistant feature built for modzee using t
 
 1.  **Clone the Repository:**
     ```bash
-    git clone [Your Repository URL]
-    cd [Your Project Directory]
+    git clone https://github.com/kennybix/modzee-assistant.git
+    cd modzee-assistant
     ```
 2.  **Install PHP Dependencies:**
     ```bash
@@ -129,15 +129,13 @@ This project is a proof-of-concept AI Assistant feature built for modzee using t
 * `POST /api/ai/assistant`: Main endpoint for sending prompts and getting AI responses. [cite: 6]
 * `POST /api/ai/report`: Endpoint for triggering the employee performance report generation.
 * `POST /api/ai/feedback`: Endpoint for submitting feedback on AI responses.
-* `GET /api/ai/usage`: Endpoint for retrieving user usage statistics (requires authentication).
+<!-- * `GET /api/ai/usage`: Endpoint for retrieving user usage statistics (requires authentication). -->
 
 ## 9. Notes / Known Issues
 
 * The context retrieval logic (`getContextDataForPrompt` in `OpenAiService`) uses basic keyword matching and might need refinement for more complex queries or larger datasets.
 * Loading entire datasets (like all employees) as context can easily exceed OpenAI token limits. Filtering data within `AssistantDataService` is recommended for production.
-* Usage tracking and cost estimation are basic; token counts might be estimated if not provided by the API response.
+<!-- * Usage tracking and cost estimation are basic; token counts might be estimated if not provided by the API response. -->
 * Streaming is not currently implemented in the main chat flow.
 
 ---
-
-*Generated based on project requirements and development discussion.*
