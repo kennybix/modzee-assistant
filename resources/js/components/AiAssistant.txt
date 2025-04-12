@@ -1,0 +1,449 @@
+<template>
+  <div class="ai-assistant">
+    <h2>modzee AI Assistant</h2>
+
+    <div class="assistant-controls">
+      <div class="persona-selector">
+        <label for="persona">Assistant Type:</label>
+        <select id="persona" v-model="selectedPersona">
+          <option v-for="persona in personas" :key="persona.value" :value="persona.value">
+            {{ persona.label }}
+          </option>
+        </select>
+      </div>
+
+      <div v-if="isAuthenticated" class="usage-info">
+        <div class="usage-meter">
+          <div class="usage-bar" :style="{ width: `${usagePercentage}%`, backgroundColor: usageBarColor }"></div>
+        </div>
+        <div class="usage-text">
+          {{ usageStats.usage || 0 }} / {{ usageStats.limit || 0 }} tokens used
+          ({{ usagePercentage }}%)
+        </div>
+      </div>
+    </div>
+
+    <div class="conversation-container" ref="conversationContainer">
+      <div v-if="conversationHistory.length === 0" class="empty-state">
+        <p>Ask me anything about team performance, sales data, or employee metrics!</p>
+        <div class="dataset-info">
+          <p><strong>Available datasets:</strong></p>
+          <ul>
+            <li>Sales Data</li>
+            <li>Sales Targets</li>
+            <li>Teams</li>
+            <li>Employees</li>
+            <li>Customers</li>
+          </ul>
+          <p>Try asking: "Summarize team performance for Q1" or "Generate a report on sales trends"</p>
+        </div>
+      </div>
+
+      <div v-else class="conversation-history">
+        <div
+          v-for="(item, index) in conversationHistory"
+          :key="item.id || index"
+          class="conversation-item"
+        >
+          <div class="user-prompt">
+            <strong>You:</strong>
+            <p>{{ item.prompt }}</p>
+          </div>
+          <div class="ai-response">
+            <strong>AI Assistant:</strong>
+            <div v-html="formatMarkdown(item.response)" class="markdown-content"></div>
+            <div class="response-meta">
+              <small>{{ formatTimestamp(item.timestamp) }}</small>
+              <div class="feedback-buttons" v-if="item.id && !item.feedbackGiven">
+                <button @click="rateResponse(item.id, 'helpful')" class="feedback-btn helpful">
+                  <i class="fas fa-thumbs-up"></i> Helpful
+                </button>
+                <button @click="rateResponse(item.id, 'not_helpful')" class="feedback-btn not-helpful">
+                  <i class="fas fa-thumbs-down"></i> Not Helpful
+                </button>
+              </div>
+              <div v-else-if="item.feedbackGiven" class="feedback-given">
+                <i class="fas fa-check"></i> Feedback submitted
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="isStreaming" class="streaming-indicator">
+        <div class="typing-indicator">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        AI is typing...
+      </div>
+    </div>
+
+    <div class="input-container">
+      <div class="input-actions">
+        <button
+          v-if="recognition"
+          @click="startVoiceInput"
+          class="voice-btn"
+          :disabled="isLoading || isListening"
+        >
+          <i class="fas" :class="isListening ? 'fa-stop' : 'fa-microphone'"></i>
+        </button>
+        <textarea
+          v-model="userPrompt"
+          placeholder="Ask about sales data, team performance, or customer metrics..."
+          :disabled="isLoading"
+          @keyup.ctrl.enter="submitPrompt"
+          ref="promptInput"
+        ></textarea>
+      </div>
+
+      <div class="button-group">
+        <button
+          @click="submitPrompt"
+          :disabled="isLoading || !userPrompt.trim()"
+          class="submit-button"
+        >
+          <span v-if="isLoading">Processing...</span>
+          <span v-else>Send</span>
+        </button>
+
+        <button
+          @click="generateReport"
+          :disabled="isLoading"
+          class="report-button"
+        >
+          Generate Team Report
+        </button>
+
+        <button
+          @click="clearConversation"
+          :disabled="isLoading || conversationHistory.length === 0"
+          class="clear-button"
+        >
+          Clear Chat
+        </button>
+      </div>
+    </div>
+
+    <div v-if="error" class="error-message">
+      <p>{{ error }}</p>
+      <button @click="dismissError" class="dismiss-btn">Dismiss</button>
+    </div>
+
+    <div v-if="showUsageStats && isAuthenticated" class="usage-stats">
+      <h3>Your AI Usage</h3>
+
+      <ai-chart
+        v-if="usageChartData.labels.length > 0"
+        :data="usageChartData"
+        type="bar"
+        :options="chartOptions"
+      />
+
+      <button @click="showUsageStats = false" class="close-btn">Close</button>
+    </div>
+  </div>
+</template>
+
+<script>
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
+import aiService from '../services/aiService';
+import AiChart from './AiChart.vue';
+
+export default {
+  name: 'AiAssistant',
+  components: {
+    AiChart
+  },
+
+  data() {
+    return {
+      userPrompt: '',
+      isLoading: false,
+      isStreaming: false,
+      isListening: false,
+      error: null,
+      selectedPersona: 'general',
+      conversationHistory: [],
+      showUsageStats: false,
+      usageStats: {
+        usage: 0,
+        limit: 0,
+        remaining: 0,
+        percentage: 0,
+        limit_exceeded: false
+      },
+      usageHistory: [],
+      recognition: null,
+      isAuthenticated: false,
+      datasetSuggestions: [
+        "Analyze sales performance for Q1",
+        "Compare team performance against targets",
+        "Identify top performing employees",
+        "Summarize customer engagement metrics",
+        "Show sales trends by region"
+      ],
+      personas: [
+        { label: 'General Assistant', value: 'general' },
+        { label: 'Sales Analyst', value: 'sales' },
+        { label: 'HR Advisor', value: 'hr' },
+        { label: 'Technical Advisor', value: 'technical' }
+      ]
+    };
+  },
+
+  computed: {
+    usagePercentage() {
+      return this.usageStats.percentage || 0;
+    },
+    usageBarColor() {
+      const percentage = this.usagePercentage;
+      if (percentage < 50) return '#52c41a';
+      if (percentage < 80) return '#faad14';
+      return '#f5222d';
+    },
+    usageChartData() {
+      return {
+        labels: this.usageHistory.map(item => item.month),
+        datasets: [{
+          label: 'Token Usage',
+          data: this.usageHistory.map(item => item.tokens_used),
+          backgroundColor: '#1890ff'
+        }]
+      };
+    },
+    chartOptions() {
+      return {
+        plugins: {
+          title: {
+            display: true,
+            text: 'Monthly Token Usage'
+          }
+        }
+      };
+    },
+    previousMessages() {
+      return this.conversationHistory.flatMap(item => [
+        { role: 'user', content: item.prompt },
+        { role: 'assistant', content: item.response }
+      ]);
+    }
+  },
+
+  watch: {
+    conversationHistory: {
+      handler(newValue) {
+        localStorage.setItem('aiConversationHistory', JSON.stringify(newValue));
+        this.$nextTick(() => {
+          this.scrollToBottom();
+        });
+      },
+      deep: true
+    },
+    selectedPersona(newValue) {
+      localStorage.setItem('aiSelectedPersona', newValue);
+    }
+  },
+
+  mounted() {
+    const authMeta = document.querySelector('meta[name="is-authenticated"]');
+    this.isAuthenticated = authMeta && authMeta.content === 'true';
+
+    const savedHistory = localStorage.getItem('aiConversationHistory');
+    if (savedHistory) {
+      try {
+        this.conversationHistory = JSON.parse(savedHistory);
+      } catch (e) {
+        console.error('Error parsing saved conversation history:', e);
+        localStorage.removeItem('aiConversationHistory');
+      }
+    }
+
+    const savedPersona = localStorage.getItem('aiSelectedPersona');
+    if (savedPersona) {
+      this.selectedPersona = savedPersona;
+    }
+
+    if ('webkitSpeechRecognition' in window) {
+      this.recognition = new webkitSpeechRecognition();
+      this.recognition.continuous = false;
+      this.recognition.interimResults = false;
+      this.recognition.lang = 'en-US';
+
+      this.recognition.onresult = (event) => {
+        this.userPrompt = event.results[0][0].transcript;
+        this.isListening = false;
+      };
+
+      this.recognition.onend = () => {
+        this.isListening = false;
+      };
+
+      this.recognition.onerror = (event) => {
+        this.isListening = false;
+        this.error = `Speech recognition error: ${event.error}`;
+      };
+    }
+
+    if (this.isAuthenticated) {
+      this.fetchUsageStats();
+    }
+  },
+
+  methods: {
+    async submitPrompt() {
+      if (!this.userPrompt.trim() || this.isLoading || this.isStreaming) return;
+
+      this.isLoading = true;
+      this.error = null;
+
+      const promptText = this.userPrompt;
+      this.userPrompt = '';
+
+      const messageIndex = this.conversationHistory.length;
+      this.conversationHistory.push({
+        prompt: promptText,
+        response: '',
+        timestamp: new Date().toISOString()
+      });
+
+      try {
+        this.isStreaming = true;
+        let streamingResponse = '';
+
+        const result = await aiService.streamPrompt(promptText, {
+          persona: this.selectedPersona,
+          previousMessages: this.previousMessages.slice(-10),
+          onChunk: (chunk) => {
+            streamingResponse += chunk;
+            this.$set(this.conversationHistory[messageIndex], 'response', streamingResponse);
+            this.scrollToBottom();
+          }
+        });
+
+        if (result && result.id) {
+          this.$set(this.conversationHistory[messageIndex], 'id', result.id);
+          this.$set(this.conversationHistory[messageIndex], 'timestamp', result.timestamp || new Date().toISOString());
+        }
+
+        if (this.isAuthenticated) {
+          this.fetchUsageStats();
+        }
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Failed to get response from AI assistant. Please try again later.';
+        this.conversationHistory.pop();
+        console.error('AI Assistant error:', error);
+      } finally {
+        this.isLoading = false;
+        this.isStreaming = false;
+        this.$nextTick(() => {
+          this.scrollToBottom();
+          this.$refs.promptInput.focus();
+        });
+      }
+    },
+
+    async generateReport() {
+      if (this.isLoading) return;
+
+      this.isLoading = true;
+      this.error = null;
+
+      const messageIndex = this.conversationHistory.length;
+      this.conversationHistory.push({
+        prompt: "Generate a comprehensive team performance report",
+        response: "Generating report based on all available data...",
+        timestamp: new Date().toISOString()
+      });
+
+      try {
+        this.isStreaming = true;
+        const result = await aiService.generateReport();
+
+        this.$set(this.conversationHistory[messageIndex], 'id', result.id);
+        this.$set(this.conversationHistory[messageIndex], 'response', result.response);
+        this.$set(this.conversationHistory[messageIndex], 'timestamp', result.timestamp || new Date().toISOString());
+
+        if (this.isAuthenticated) {
+          this.fetchUsageStats();
+        }
+      } catch (error) {
+        this.error = 'Failed to generate report. Please try again later.';
+        this.conversationHistory[messageIndex].response = 'Sorry, I couldn’t generate the report right now.';
+        console.error('Report generation error:', error);
+      } finally {
+        this.isLoading = false;
+        this.isStreaming = false;
+        this.$nextTick(() => {
+          this.scrollToBottom();
+        });
+      }
+    },
+
+    async rateResponse(responseId, rating) {
+      try {
+        await aiService.submitFeedback(responseId, rating);
+        const index = this.conversationHistory.findIndex(item => item.id === responseId);
+        if (index !== -1) {
+          this.$set(this.conversationHistory[index], 'feedbackGiven', true);
+        }
+      } catch (error) {
+        this.error = 'Failed to submit feedback. Please try again later.';
+        console.error('Feedback submission error:', error);
+      }
+    },
+
+    async fetchUsageStats() {
+      try {
+        const data = await aiService.getUserUsage();
+        this.usageStats = data.usage;
+        this.usageHistory = data.history;
+      } catch (error) {
+        console.error('Error fetching usage stats:', error);
+      }
+    },
+
+    formatTimestamp(timestamp) {
+      if (!timestamp) return '';
+      const date = new Date(timestamp);
+      return date.toLocaleString();
+    },
+
+    formatMarkdown(text) {
+      if (!text) return '';
+      return DOMPurify.sanitize(marked(text));
+    },
+
+    scrollToBottom() {
+      this.$nextTick(() => {
+        const container = this.$refs.conversationContainer;
+        if (container) {
+          container.scrollTop = container.scrollHeight;
+        }
+      });
+    },
+
+    startVoiceInput() {
+      if (this.isListening) {
+        this.recognition.stop();
+        this.isListening = false;
+      } else {
+        this.recognition.start();
+        this.isListening = true;
+      }
+    },
+
+    clearConversation() {
+      this.conversationHistory = [];
+      localStorage.removeItem('aiConversationHistory');
+    },
+
+    dismissError() {
+      this.error = null;
+    }
+  }
+};
+</script>
